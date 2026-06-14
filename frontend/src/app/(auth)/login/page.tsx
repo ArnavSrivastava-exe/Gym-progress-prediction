@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { authAPI } from "@/lib/api"
+import { authAPI, api } from "@/lib/api"
 import { setToken } from "@/lib/auth"
 
 export default function LoginPage() {
@@ -16,20 +16,30 @@ export default function LoginPage() {
     e.preventDefault()
     setError("")
     setLoading(true)
+
     try {
       const res = await authAPI.login(form)
+
       setToken(res.data.access_token)
-      router.push("/dashboard")
+
+      const onboardingRes = await api.get("/auth/onboarding-status")
+
+      if (onboardingRes.data.onboarding_completed) {
+        router.push("/dashboard")
+      } else {
+        router.push("/onboarding")
+      }
     } catch (err: any) {
       const detail = err.response?.data?.detail
+
       let errorMsg = "Invalid credentials. Is the backend running?"
-      
+
       if (Array.isArray(detail)) {
         errorMsg = detail[0]?.msg || "Validation error"
       } else if (typeof detail === "string") {
         errorMsg = detail
       }
-      
+
       setError(errorMsg)
     } finally {
       setLoading(false)
@@ -61,6 +71,7 @@ export default function LoginPage() {
           >
             Gym Analytics
           </p>
+
           <h1
             style={{
               fontSize: "32px",
@@ -72,18 +83,37 @@ export default function LoginPage() {
           >
             Welcome back
           </h1>
-          <p style={{ fontSize: "13px", color: "rgba(255,255,255,0.35)", marginTop: "8px" }}>
+
+          <p
+            style={{
+              fontSize: "13px",
+              color: "rgba(255,255,255,0.35)",
+              marginTop: "8px",
+            }}
+          >
             Sign in to your analytics dashboard
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+        <form
+          onSubmit={handleSubmit}
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: "16px",
+          }}
+        >
           <div>
             <label>Email</label>
             <input
               type="email"
               value={form.email}
-              onChange={(e) => setForm({ ...form, email: e.target.value })}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  email: e.target.value,
+                })
+              }
               placeholder="athlete@example.com"
               required
             />
@@ -94,7 +124,12 @@ export default function LoginPage() {
             <input
               type="password"
               value={form.password}
-              onChange={(e) => setForm({ ...form, password: e.target.value })}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  password: e.target.value,
+                })
+              }
               placeholder="••••••••"
               required
             />
@@ -115,7 +150,12 @@ export default function LoginPage() {
             </div>
           )}
 
-          <button type="submit" className="btn-primary" disabled={loading} style={{ marginTop: "8px" }}>
+          <button
+            type="submit"
+            className="btn-primary"
+            disabled={loading}
+            style={{ marginTop: "8px" }}
+          >
             {loading ? "Signing in..." : "Sign In"}
           </button>
         </form>
@@ -129,7 +169,12 @@ export default function LoginPage() {
           }}
         >
           No account?{" "}
-          <Link href="/register" style={{ color: "rgba(255,255,255,0.5)" }}>
+          <Link
+            href="/register"
+            style={{
+              color: "rgba(255,255,255,0.5)",
+            }}
+          >
             Create one
           </Link>
         </p>
