@@ -1,5 +1,6 @@
 from typing import Optional
 from pydantic import BaseModel
+from datetime import datetime
 
 # Auth Schemas
 class UserCreate(BaseModel):
@@ -44,6 +45,7 @@ class WorkoutCreate(BaseModel):
     weight_kg: float
     reps: int
     sets: int
+    date: str  # ← ADD THIS (YYYY-MM-DD format)
     notes: Optional[str] = None
 
 class WorkoutResponse(BaseModel):
@@ -53,6 +55,7 @@ class WorkoutResponse(BaseModel):
     weight_kg: float
     reps: int
     sets: int
+    date: datetime  # ← ADD THIS
     notes: Optional[str] = None
 
     class Config:

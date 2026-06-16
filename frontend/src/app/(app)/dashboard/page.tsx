@@ -1,242 +1,389 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import Cookies from "js-cookie"
-import AppLayout from "@/components/layout/AppLayout"
-import StatCard from "@/components/ui/StatCard"
-import SectionHeader from "@/components/ui/SectionHeader"
-import { mlAPI } from "@/lib/api"
+import { useRouter } from "next/navigation"
+import { api } from "@/lib/api"
 import {
-  LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid,
-  Tooltip, ResponsiveContainer, ReferenceLine
+  LineChart,
+  Line,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
 } from "recharts"
 
 export default function DashboardPage() {
-  const [summary, setSummary] = useState<any>(null)
+  const router = useRouter()
+  const [dashboardData, setDashboardData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const token = Cookies.get("access_token")
-    if (!token) {
-      setLoading(false)
-      return
+    const fetchData = async () => {
+      try {
+        const response = await api.get("/ml/dashboard-summary")
+        setDashboardData(response.data)
+      } catch (err) {
+        console.error("Error:", err)
+      } finally {
+        setLoading(false)
+      }
     }
-    
-    mlAPI.dashboard()
-      .then(r => setSummary(r.data))
-      .catch(err => {
-        console.error("Dashboard error:", err)
-        setSummary(null)
-      })
-      .finally(() => setLoading(false))
+
+    fetchData()
   }, [])
 
-  const today = new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })
-
-  return (
-    <AppLayout>
-      <div className="flex items-start justify-between mb-10">
-        <div>
-          <p className="text-xs text-white/30 uppercase tracking-widest mb-2">{today}</p>
-          <h1 className="text-4xl font-light tracking-tight text-white glow-text">Gym Progress<br />Prediction System</h1>
-          <p className="text-sm text-white/35 mt-3 tracking-widest">Predict. Analyze. Optimize.</p>
-        </div>
+  if (loading) {
+    return (
+      <div style={{ color: "white", textAlign: "center", paddingTop: "50px" }}>
+        Loading...
       </div>
+    )
+  }
 
-      {/* Stat Row */}
-      <div className="grid grid-cols-5 gap-3 mb-8">
-        <StatCard label="Total Workouts" value={summary?.total_workouts ?? "—"} sub="This Month" />
-        <StatCard label="Total Volume" value={summary?.total_volume_kg ? `${(summary.total_volume_kg / 1000).toFixed(1)}K` : "—"} sub="kg" />
-        <StatCard label="Avg. Sleep" value={summary?.avg_sleep_hours?.toFixed(1) ?? "—"} sub="hours" />
-        <StatCard label="Body Fat" value={summary?.current_body_fat ? `${summary.current_body_fat}%` : "—"} trendValue={summary?.body_fat_delta ? `${Math.abs(summary.body_fat_delta)}% vs last month` : undefined} trend={summary?.body_fat_delta < 0 ? "up" : "down"} />
-        <StatCard label="Strength Index" value={summary?.strength_index?.toFixed(1) ?? "—"} sub={summary?.strength_index >= 75 ? "Good" : "Developing"} />
-      </div>
-
-      <div className="grid grid-cols-3 gap-5 mb-5">
-        {/* Strength Chart */}
-        <div className="col-span-2 bg-[#0a0a0a] border border-white/10 rounded-lg p-5">
-          <div className="flex items-center justify-between mb-5">
-            <h2 className="text-xs font-semibold uppercase tracking-widest text-white">Strength Progression</h2>
-            <span className="text-xs text-white/30">Bench Press (1RM)</span>
-          </div>
-          <ResponsiveContainer width="100%" height={200}>
-            <LineChart data={summary?.strength_chart ?? []}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-              <XAxis dataKey="date" tick={{ fontSize: 10, fill: "rgba(255,255,255,0.3)" }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 10, fill: "rgba(255,255,255,0.3)" }} axisLine={false} tickLine={false} />
-              <Tooltip contentStyle={{ background: "#111", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, fontSize: 12 }} labelStyle={{ color: "rgba(255,255,255,0.5)" }} />
-              <Line type="monotone" dataKey="actual" stroke="rgba(255,255,255,0.9)" strokeWidth={1.5} dot={false} name="Actual" />
-              <Line type="monotone" dataKey="predicted" stroke="rgba(255,255,255,0.35)" strokeWidth={1.5} strokeDasharray="4 4" dot={false} name="Predicted" />
-            </LineChart>
-          </ResponsiveContainer>
-          <div className="flex items-center gap-6 mt-4 pt-4 border-t border-white/5">
-            <div>
-              <p className="text-xs text-white/30">vs previous 3 months</p>
-              <p className="text-lg font-light text-white mt-0.5">
-                ↑ {summary?.strength_progress_pct?.toFixed(1) ?? "—"}%
-              </p>
-            </div>
-            <div className="ml-auto text-right">
-              <p className="text-xs text-white/30">Predicted 1RM</p>
-              <p className="text-lg font-light text-white mt-0.5">{summary?.predicted_bench_1rm ?? "—"} kg</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Plateau Risk */}
-        <div className="bg-[#0a0a0a] border border-white/10 rounded-lg p-5">
-          <h2 className="text-xs font-semibold uppercase tracking-widest text-white mb-6">Plateau Risk</h2>
-          <PlateauGauge risk={summary?.plateau_risk} confidence={summary?.plateau_confidence} />
-          <div className="mt-6 pt-4 border-t border-white/5">
-            <div className="flex justify-between text-xs mb-4">
-              <span className="text-white/40">Confidence</span>
-              <span className="text-white">{summary?.plateau_confidence ? `${(summary.plateau_confidence * 100).toFixed(0)}%` : "—"}</span>
-            </div>
-            <p className="text-xs text-white/30 mb-2">Factors</p>
-            {(summary?.plateau_factors ?? ["Increasing training volume", "Good recovery", "Progressive overload detected"]).map((f: string, i: number) => (
-              <div key={i} className="flex items-center gap-2 mb-1.5">
-                <div className="w-1 h-1 bg-white/30 rounded-full" />
-                <span className="text-xs text-white/50">{f}</span>
+  // LOCKED STATE - Show when < 7 workouts
+  if (dashboardData?.unlocked === false || dashboardData?.locked === true) {
+    return (
+      <div style={{ background: "#000", color: "white", minHeight: "100vh", padding: "30px" }}>
+        <div style={{ maxWidth: "1400px", margin: "0 auto" }}>
+          {/* Header */}
+          <div style={{ marginBottom: "40px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
+              <div>
+                <p style={{ fontSize: "12px", color: "rgba(255,255,255,0.5)", margin: "0" }}>💪 GYM ANALYTICS</p>
+                <h1 style={{ fontSize: "36px", fontWeight: "700", margin: "0", color: "white", marginTop: "8px" }}>
+                  GYM PROGRESS PREDICTION SYSTEM
+                </h1>
+                <p style={{ fontSize: "14px", color: "rgba(255,255,255,0.6)", margin: "4px 0 0 0" }}>Predict. Analyze. Optimize.</p>
               </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-3 gap-5 mb-5">
-        {/* Body Fat Trend */}
-        <div className="col-span-2 bg-[#0a0a0a] border border-white/10 rounded-lg p-5">
-          <div className="flex items-center justify-between mb-5">
-            <h2 className="text-xs font-semibold uppercase tracking-widest text-white">Body Fat Trend</h2>
-            <span className="text-xs text-white/30">Body Fat %</span>
-          </div>
-          <ResponsiveContainer width="100%" height={180}>
-            <LineChart data={summary?.bodyfat_chart ?? []}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-              <XAxis dataKey="date" tick={{ fontSize: 10, fill: "rgba(255,255,255,0.3)" }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 10, fill: "rgba(255,255,255,0.3)" }} axisLine={false} tickLine={false} />
-              <Tooltip contentStyle={{ background: "#111", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, fontSize: 12 }} labelStyle={{ color: "rgba(255,255,255,0.5)" }} />
-              <Line type="monotone" dataKey="actual" stroke="rgba(255,255,255,0.9)" strokeWidth={1.5} dot={false} name="Actual" />
-              <Line type="monotone" dataKey="predicted" stroke="rgba(255,255,255,0.35)" strokeWidth={1.5} strokeDasharray="4 4" dot={false} name="Predicted" />
-            </LineChart>
-          </ResponsiveContainer>
-          <div className="flex items-center gap-6 mt-4 pt-4 border-t border-white/5">
-            <div>
-              <p className="text-xs text-white/30">vs previous 3 months</p>
-              <p className="text-lg font-light text-white mt-0.5">↓ {Math.abs(summary?.body_fat_delta ?? 1.3).toFixed(1)}%</p>
-            </div>
-            <div className="ml-auto text-right">
-              <p className="text-xs text-white/30">Predicted Body Fat</p>
-              <p className="text-lg font-light text-white mt-0.5">{summary?.predicted_body_fat ?? "—"}%</p>
             </div>
           </div>
-        </div>
 
-        {/* Recommendations */}
-        <div className="bg-[#0a0a0a] border border-white/10 rounded-lg p-5">
-          <h2 className="text-xs font-semibold uppercase tracking-widest text-white mb-5">Recommended Adjustments</h2>
-          <div className="space-y-4">
-            {(summary?.recommendations ?? [
-              { title: "Increase Volume", desc: "Add 1-2 sets for compound lifts", priority: "High" },
-              { title: "Increase Intensity", desc: "Add 2.5–5 kg to working sets", priority: "Medium" },
-              { title: "Deload in 5 Weeks", desc: "Take a deload week to optimize recovery", priority: "Low" },
-            ]).map((r: any, i: number) => (
-              <div key={i} className="flex items-start gap-3 pb-4 border-b border-white/5 last:border-0 last:pb-0">
-                <div className="w-6 h-6 border border-white/15 rounded flex items-center justify-center flex-shrink-0 mt-0.5">
-                  <div className="w-2 h-2 bg-white/30 rounded-full" />
+          {/* LOCKED MESSAGE */}
+          <div
+            style={{
+              background: "#000",
+              border: "2px solid rgba(255,255,255,0.2)",
+              borderRadius: "12px",
+              padding: "60px 40px",
+              textAlign: "center",
+              marginTop: "60px",
+            }}
+          >
+            <div style={{ fontSize: "64px", marginBottom: "20px" }}>🔒</div>
+            <h2 style={{ fontSize: "32px", fontWeight: "700", margin: "0 0 16px 0", color: "white" }}>Insights Locked</h2>
+            <p style={{ fontSize: "18px", color: "rgba(255,255,255,0.7)", margin: "0 0 32px 0" }}>
+              Start logging your workouts to unlock personalized insights and AI-powered predictions!
+            </p>
+
+            {/* Progress */}
+            <div style={{ background: "rgba(255,255,255,0.05)", borderRadius: "8px", padding: "24px", marginBottom: "32px", maxWidth: "500px", margin: "0 auto 32px" }}>
+              <p style={{ fontSize: "14px", color: "rgba(255,255,255,0.6)", margin: "0 0 12px 0", textTransform: "uppercase" }}>
+                Progress
+              </p>
+              <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+                <div style={{ flex: 1 }}>
+                  <div
+                    style={{
+                      background: "rgba(255,255,255,0.1)",
+                      borderRadius: "8px",
+                      height: "8px",
+                      overflow: "hidden",
+                    }}
+                  >
+                    <div
+                      style={{
+                        background: "linear-gradient(90deg, #4ade80, #3b82f6)",
+                        height: "100%",
+                        width: `${((dashboardData?.unique_dates_logged || dashboardData?.total_workouts || 0) / 7) * 100}%`,
+                        transition: "width 0.3s ease",
+                      }}
+                    />
+                  </div>
                 </div>
-                <div className="flex-1">
-                  <p className="text-xs font-medium text-white">{r.title}</p>
-                  <p className="text-xs text-white/35 mt-0.5">{r.desc}</p>
-                </div>
-                <span className={`text-xs mt-0.5 ${r.priority === "High" ? "text-white" : r.priority === "Medium" ? "text-white/60" : "text-white/30"}`}>
-                  {r.priority}
+                <span style={{ fontSize: "16px", fontWeight: "600", color: "white", minWidth: "80px" }}>
+                  {(dashboardData?.unique_dates_logged || dashboardData?.total_workouts || 0)} / 7
                 </span>
               </div>
-            ))}
-          </div>
-        </div>
-      </div>
+              <p style={{ fontSize: "12px", color: "rgba(255,255,255,0.5)", margin: "12px 0 0 0" }}>
+                {dashboardData?.workouts_needed || 7} more workouts needed
+              </p>
+            </div>
 
-      {/* Weekly Volume */}
-      <div className="grid grid-cols-3 gap-5">
-        <div className="col-span-2 bg-[#0a0a0a] border border-white/10 rounded-lg p-5">
-          <div className="flex items-center justify-between mb-5">
-            <h2 className="text-xs font-semibold uppercase tracking-widest text-white">Weekly Volume Overview</h2>
-            <span className="text-xs text-white/30">All Exercises</span>
-          </div>
-          <ResponsiveContainer width="100%" height={160}>
-            <BarChart data={summary?.weekly_volume ?? []}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-              <XAxis dataKey="week" tick={{ fontSize: 10, fill: "rgba(255,255,255,0.3)" }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 10, fill: "rgba(255,255,255,0.3)" }} axisLine={false} tickLine={false} />
-              <Tooltip contentStyle={{ background: "#111", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, fontSize: 12 }} labelStyle={{ color: "rgba(255,255,255,0.5)" }} />
-              <ReferenceLine y={summary?.optimal_volume_min} stroke="rgba(255,255,255,0.2)" strokeDasharray="3 3" />
-              <Bar dataKey="volume" fill="rgba(255,255,255,0.15)" radius={[2, 2, 0, 0]} name="Volume (kg)" />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* Top Lifts */}
-        <div className="bg-[#0a0a0a] border border-white/10 rounded-lg p-5">
-          <h2 className="text-xs font-semibold uppercase tracking-widest text-white mb-5">Top Lifts</h2>
-          <div className="space-y-3">
-            {(summary?.top_lifts ?? [
-              { rank: 1, name: "Squat", progress: 15.2 },
-              { rank: 2, name: "Bench Press", progress: 12.6 },
-              { rank: 3, name: "Deadlift", progress: 10.8 },
-              { rank: 4, name: "Overhead Press", progress: 8.4 },
-              { rank: 5, name: "Pull Up", progress: 7.1 },
-            ]).map((l: any) => (
-              <div key={l.rank} className="flex items-center gap-3">
-                <span className="text-xs text-white/25 w-4">{l.rank}.</span>
-                <span className="text-xs text-white/70 flex-1">{l.name}</span>
-                <span className="text-xs text-white/60">↑ {l.progress?.toFixed(1)}%</span>
+            {/* What Unlocks */}
+            <div style={{ background: "rgba(255,255,255,0.03)", borderRadius: "8px", padding: "24px", marginBottom: "32px" }}>
+              <p style={{ fontSize: "14px", color: "rgba(255,255,255,0.6)", margin: "0 0 16px 0", textTransform: "uppercase" }}>
+                What You'll Get
+              </p>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "16px" }}>
+                <div>
+                  <div style={{ fontSize: "24px", marginBottom: "8px" }}>📊</div>
+                  <p style={{ fontSize: "12px", fontWeight: "600", color: "white", margin: "0 0 4px 0" }}>Progress Charts</p>
+                  <p style={{ fontSize: "11px", color: "rgba(255,255,255,0.5)", margin: "0" }}>Track trends over time</p>
+                </div>
+                <div>
+                  <div style={{ fontSize: "24px", marginBottom: "8px" }}>🤖</div>
+                  <p style={{ fontSize: "12px", fontWeight: "600", color: "white", margin: "0 0 4px 0" }}>AI Predictions</p>
+                  <p style={{ fontSize: "11px", color: "rgba(255,255,255,0.5)", margin: "0" }}>Future performance</p>
+                </div>
+                <div>
+                  <div style={{ fontSize: "24px", marginBottom: "8px" }}>💡</div>
+                  <p style={{ fontSize: "12px", fontWeight: "600", color: "white", margin: "0 0 4px 0" }}>Smart Tips</p>
+                  <p style={{ fontSize: "11px", color: "rgba(255,255,255,0.5)", margin: "0" }}>Personalized advice</p>
+                </div>
+                <div>
+                  <div style={{ fontSize: "24px", marginBottom: "8px" }}>⚠️</div>
+                  <p style={{ fontSize: "12px", fontWeight: "600", color: "white", margin: "0 0 4px 0" }}>Plateau Detection</p>
+                  <p style={{ fontSize: "11px", color: "rgba(255,255,255,0.5)", margin: "0" }}>Stay ahead of stalls</p>
+                </div>
               </div>
-            ))}
+            </div>
+
+            {/* CTA Button */}
+            <button
+              onClick={() => router.push("/workouts")}
+              style={{
+                padding: "16px 32px",
+                background: "rgba(255,255,255,0.1)",
+                border: "1px solid rgba(255,255,255,0.2)",
+                borderRadius: "8px",
+                color: "white",
+                fontSize: "16px",
+                fontWeight: "600",
+                cursor: "pointer",
+                transition: "transform 0.2s ease",
+              }}
+              onMouseOver={(e) => {
+                ;(e.target as HTMLButtonElement).style.transform = "scale(1.05)"
+              }}
+              onMouseOut={(e) => {
+                ;(e.target as HTMLButtonElement).style.transform = "scale(1)"
+              }}
+            >
+              Start Logging Workouts →
+            </button>
           </div>
-          <p className="text-xs text-white/20 mt-5 pt-4 border-t border-white/5">vs previous 3 months</p>
         </div>
       </div>
-
-      {/* Footer */}
-      <div className="flex items-center justify-center gap-2 mt-10 pt-6 border-t border-white/5">
-        <div className="w-4 h-4 border border-white/20 rounded-full flex items-center justify-center">
-          <div className="w-1.5 h-1.5 bg-white/40 rounded-full" />
-        </div>
-        <span className="text-xs text-white/20">Powered by Machine Learning</span>
-        <span className="text-white/10 mx-1">·</span>
-        <span className="text-xs text-white/20">Models: XGBoost, LSTM, Time Series Forecasting</span>
-      </div>
-    </AppLayout>
-  )
-}
-
-function PlateauGauge({ risk, confidence }: { risk?: string; confidence?: number }) {
-  const riskLabel = risk ?? "LOW"
-  const riskMap: Record<string, { angle: number; desc: string }> = {
-    LOW: { angle: 45, desc: "You are not likely to hit a plateau in the next 4 weeks." },
-    MEDIUM: { angle: 135, desc: "Moderate risk of plateau. Consider a deload soon." },
-    HIGH: { angle: 225, desc: "High plateau risk detected. Deload recommended." },
+    )
   }
-  const { angle, desc } = riskMap[riskLabel] ?? riskMap["LOW"]
-  const r = 60
-  const cx = 80, cy = 80
-  const startAngle = 180
-  const endAngle = startAngle + (angle / 270) * 180
-  const toRad = (d: number) => (d * Math.PI) / 180
-  const x = cx + r * Math.cos(toRad(endAngle))
-  const y = cy + r * Math.sin(toRad(endAngle))
+
+  if (!dashboardData) {
+    return (
+      <div style={{ color: "white", textAlign: "center", paddingTop: "50px" }}>
+        No data available
+      </div>
+    )
+  }
+
+  // UNLOCKED STATE - Show full dashboard
+  const strengthData = [
+    { month: "Jan", actual: 80, predicted: 82 },
+    { month: "Feb", actual: 85, predicted: 87 },
+    { month: "Mar", actual: 90, predicted: 92 },
+    { month: "Apr", actual: 95, predicted: 98 },
+    { month: "May", actual: 100, predicted: 103 },
+    { month: "Jun", actual: 105, predicted: 108 },
+    { month: "Jul", actual: 110, predicted: 113 },
+    { month: "Aug", actual: 115, predicted: 127.5 },
+  ]
+
+  const bodyFatData = [
+    { month: "Jan", actual: 20, predicted: 19.5 },
+    { month: "Feb", actual: 19.5, predicted: 19 },
+    { month: "Mar", actual: 19, predicted: 18.5 },
+    { month: "Apr", actual: 18, predicted: 17.5 },
+    { month: "May", actual: 17, predicted: 16.5 },
+    { month: "Jun", actual: 16, predicted: 15.5 },
+    { month: "Jul", actual: 15, predicted: 14.5 },
+    { month: "Aug", actual: 13.2, predicted: 13.2 },
+  ]
+
+  const volumeData = [
+    { week: "Apr 27", volume: 1200 },
+    { week: "May 4", volume: 1450 },
+    { week: "May 11", volume: 1350 },
+    { week: "May 18", volume: 1600 },
+    { week: "May 25", volume: 1400 },
+    { week: "Jun 1", volume: 1700 },
+    { week: "Jun 8", volume: 1550 },
+    { week: "Jun 15", volume: 1400 },
+  ]
+
+  const recommendations = [
+    { title: "Increase Volume", desc: "Add 1-2 sets for compound lifts (Bench, Squat, Deadlift)", priority: "High" },
+    { title: "Increase Intensity", desc: "Add 2.5 - 5 kg to your working sets", priority: "Medium" },
+    { title: "Deload in 5 Weeks", desc: "Take a deload week to optimize recovery", priority: "Low" },
+  ]
 
   return (
-    <div className="flex flex-col items-center">
-      <svg width="160" height="100" viewBox="0 0 160 100">
-        <path d={`M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${cx + r} ${cy}`} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="8" strokeLinecap="round" />
-        <path d={`M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${x} ${y}`} fill="none" stroke="rgba(255,255,255,0.7)" strokeWidth="8" strokeLinecap="round" />
-        <text x={cx} y={cy - 8} textAnchor="middle" fill="white" fontSize="18" fontWeight="300">{riskLabel}</text>
-        <text x={cx} y={cy + 10} textAnchor="middle" fill="rgba(255,255,255,0.35)" fontSize="9">Risk Level</text>
-      </svg>
-      <p className="text-xs text-white/35 text-center mt-2 leading-relaxed">{desc}</p>
+    <div style={{ background: "#000", color: "white", minHeight: "100vh", padding: "30px" }}>
+      <div style={{ maxWidth: "1400px", margin: "0 auto" }}>
+        {/* Header */}
+        <div style={{ marginBottom: "40px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
+            <div>
+              <p style={{ fontSize: "12px", color: "rgba(255,255,255,0.5)", margin: "0" }}>💪 GYM ANALYTICS</p>
+              <h1 style={{ fontSize: "36px", fontWeight: "700", margin: "0", color: "white", marginTop: "8px" }}>
+                GYM PROGRESS PREDICTION SYSTEM
+              </h1>
+              <p style={{ fontSize: "14px", color: "rgba(255,255,255,0.6)", margin: "4px 0 0 0" }}>Predict. Analyze. Optimize.</p>
+            </div>
+            <div style={{ textAlign: "right" }}>
+              <p style={{ fontSize: "12px", color: "rgba(255,255,255,0.5)", margin: "0" }}>Today</p>
+              <p style={{ fontSize: "18px", color: "white", fontWeight: "600", margin: "4px 0" }}>
+                {new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Top Stats */}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+            gap: "16px",
+            marginBottom: "40px",
+          }}
+        >
+          <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "8px", padding: "20px" }}>
+            <p style={{ fontSize: "11px", color: "rgba(255,255,255,0.5)", margin: "0 0 8px 0", textTransform: "uppercase" }}>Total Workouts</p>
+            <p style={{ fontSize: "28px", fontWeight: "700", margin: "0", color: "white" }}>{dashboardData.total_workouts || 0}</p>
+            <p style={{ fontSize: "11px", color: "rgba(255,255,255,0.4)", margin: "4px 0 0 0" }}>Logged</p>
+          </div>
+
+          <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "8px", padding: "20px" }}>
+            <p style={{ fontSize: "11px", color: "rgba(255,255,255,0.5)", margin: "0 0 8px 0", textTransform: "uppercase" }}>Total Volume</p>
+            <p style={{ fontSize: "28px", fontWeight: "700", margin: "0", color: "white" }}>{dashboardData.total_volume_kg?.toFixed(0) || 0}</p>
+            <p style={{ fontSize: "11px", color: "rgba(255,255,255,0.4)", margin: "4px 0 0 0" }}>kg</p>
+          </div>
+
+          <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "8px", padding: "20px" }}>
+            <p style={{ fontSize: "11px", color: "rgba(255,255,255,0.5)", margin: "0 0 8px 0", textTransform: "uppercase" }}>Avg Sleep</p>
+            <p style={{ fontSize: "28px", fontWeight: "700", margin: "0", color: "white" }}>{dashboardData.avg_sleep_hours?.toFixed(1) || 0}</p>
+            <p style={{ fontSize: "11px", color: "rgba(255,255,255,0.4)", margin: "4px 0 0 0" }}>hours</p>
+          </div>
+
+          <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "8px", padding: "20px" }}>
+            <p style={{ fontSize: "11px", color: "rgba(255,255,255,0.5)", margin: "0 0 8px 0", textTransform: "uppercase" }}>Body Fat</p>
+            <p style={{ fontSize: "28px", fontWeight: "700", margin: "0", color: "white" }}>{dashboardData.body_fat_pct?.toFixed(1) || 0}%</p>
+            <p style={{ fontSize: "11px", color: "rgba(255,255,255,0.4)", margin: "4px 0 0 0" }}>Current</p>
+          </div>
+
+          <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "8px", padding: "20px" }}>
+            <p style={{ fontSize: "11px", color: "rgba(255,255,255,0.5)", margin: "0 0 8px 0", textTransform: "uppercase" }}>Strength Index</p>
+            <p style={{ fontSize: "28px", fontWeight: "700", margin: "0", color: "white" }}>{dashboardData.strength_index?.toFixed(1) || 0}</p>
+            <p style={{ fontSize: "11px", color: "rgba(255,255,255,0.4)", margin: "4px 0 0 0" }}>Score</p>
+          </div>
+        </div>
+
+        {/* Charts Row 1 */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(500px, 1fr))", gap: "20px", marginBottom: "30px" }}>
+          {/* Strength Progression */}
+          <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "8px", padding: "24px" }}>
+            <h3 style={{ fontSize: "16px", fontWeight: "600", margin: "0 0 20px 0", color: "white" }}>STRENGTH PROGRESSION</h3>
+            <div style={{ marginBottom: "16px" }}>
+              <select style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.1)", color: "white", padding: "8px 12px", borderRadius: "4px", fontSize: "13px" }}>
+                <option>Bench Press (1RM)</option>
+                <option>Squat (1RM)</option>
+                <option>Deadlift (1RM)</option>
+              </select>
+            </div>
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart data={strengthData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+                <XAxis stroke="rgba(255,255,255,0.4)" dataKey="month" />
+                <YAxis stroke="rgba(255,255,255,0.4)" />
+                <Tooltip contentStyle={{ background: "rgba(0,0,0,0.8)", border: "1px solid rgba(255,255,255,0.2)" }} />
+                <Legend />
+                <Line type="monotone" dataKey="actual" stroke="#ffffff" strokeWidth={2} />
+                <Line type="monotone" dataKey="predicted" stroke="rgba(255,255,255,0.5)" strokeDasharray="5 5" strokeWidth={2} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Plateau Risk */}
+          <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "8px", padding: "24px" }}>
+            <h3 style={{ fontSize: "16px", fontWeight: "600", margin: "0 0 20px 0", color: "white" }}>PLATEAU RISK</h3>
+            <div style={{ display: "flex", justifyContent: "center", marginBottom: "24px" }}>
+              <div style={{ position: "relative", width: "150px", height: "150px" }}>
+                <svg viewBox="0 0 200 200" style={{ width: "100%", height: "100%" }}>
+                  <circle cx="100" cy="100" r="90" fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="20" />
+                  <circle cx="100" cy="100" r="90" fill="none" stroke="#4ade80" strokeWidth="20" strokeDasharray="56.5 282.7" strokeLinecap="round" transform="rotate(-90 100 100)" />
+                </svg>
+                <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", textAlign: "center" }}>
+                  <p style={{ fontSize: "28px", fontWeight: "700", margin: "0", color: "#4ade80" }}>{dashboardData.plateau_risk}</p>
+                  <p style={{ fontSize: "11px", color: "rgba(255,255,255,0.5)", margin: "4px 0 0 0" }}>Risk Level</p>
+                </div>
+              </div>
+            </div>
+            <div style={{ background: "rgba(255,255,255,0.04)", borderRadius: "6px", padding: "12px" }}>
+              <p style={{ fontSize: "11px", color: "rgba(255,255,255,0.5)", margin: "0 0 8px 0", textTransform: "uppercase" }}>Confidence: {((dashboardData.plateau_confidence || 0) * 100).toFixed(0)}%</p>
+              <p style={{ fontSize: "12px", color: "rgba(255,255,255,0.6)", margin: "0 0 12px 0" }}>Factors:</p>
+              <ul style={{ margin: "0", paddingLeft: "20px", fontSize: "11px", color: "rgba(255,255,255,0.5)" }}>
+                {dashboardData.plateau_factors?.map((factor: string, idx: number) => (
+                  <li key={idx}>{factor}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        {/* Recommendations & Top Lifts */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(400px, 1fr))", gap: "20px", marginBottom: "30px" }}>
+          {/* Recommendations */}
+          <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "8px", padding: "24px" }}>
+            <h3 style={{ fontSize: "16px", fontWeight: "600", margin: "0 0 20px 0", color: "white" }}>RECOMMENDED ADJUSTMENTS</h3>
+            <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+              {(dashboardData.recommendations || []).map((rec: any, idx: number) => (
+                <div key={idx} style={{ background: "rgba(255,255,255,0.04)", borderRadius: "6px", padding: "16px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: "8px" }}>
+                    <h4 style={{ fontSize: "13px", fontWeight: "600", margin: "0", color: "white" }}>{rec.title}</h4>
+                    <span
+                      style={{
+                        fontSize: "10px",
+                        padding: "4px 8px",
+                        borderRadius: "4px",
+                        background: rec.priority === "High" ? "rgba(255,100,100,0.2)" : rec.priority === "Medium" ? "rgba(255,180,100,0.2)" : "rgba(100,150,255,0.2)",
+                        color: rec.priority === "High" ? "#ff6464" : rec.priority === "Medium" ? "#ffb464" : "#6496ff",
+                      }}
+                    >
+                      {rec.priority}
+                    </span>
+                  </div>
+                  <p style={{ fontSize: "12px", color: "rgba(255,255,255,0.5)", margin: "0" }}>{rec.desc}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Top Lifts */}
+          <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "8px", padding: "24px" }}>
+            <h3 style={{ fontSize: "16px", fontWeight: "600", margin: "0 0 20px 0", color: "white" }}>TOP LIFTS</h3>
+            <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+              {(dashboardData.top_lifts || []).map((lift: any, idx: number) => (
+                <div key={idx} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingBottom: "12px", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                  <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+                    <span style={{ fontSize: "14px", fontWeight: "600", color: "rgba(255,255,255,0.5)", minWidth: "20px" }}>{idx + 1}.</span>
+                    <span style={{ fontSize: "13px", color: "white" }}>{lift.name}</span>
+                  </div>
+                  <span style={{ fontSize: "13px", fontWeight: "600", color: "#4ade80" }}>↑ {lift.progress}%</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div style={{ textAlign: "center", paddingTop: "30px", borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+          <p style={{ fontSize: "12px", color: "rgba(255,255,255,0.4)", margin: "0 0 8px 0" }}>🧠 Powered by Machine Learning</p>
+          <p style={{ fontSize: "11px", color: "rgba(255,255,255,0.3)", margin: "0" }}>Models: XGBoost, LSTM, Time Series Forecasting</p>
+        </div>
+      </div>
     </div>
   )
 }

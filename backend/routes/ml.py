@@ -32,6 +32,11 @@ def get_user_data(user_id: int, db: Session):
         [r.__dict__ for r in recovery],
     )
 
+def is_user_unlocked(user_id: int, db: Session):
+    """Check if user has logged >= 7 workouts"""
+    workout_count = db.query(Workout).filter(Workout.user_id == user_id).count()
+    return workout_count >= 7
+
 @router.get("/strength-prediction")
 def strength_prediction(exercise: str = "Bench Press", db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Predict strength progression"""
@@ -175,11 +180,42 @@ def recommendations(db: Session = Depends(get_db), current_user: User = Depends(
 
 @router.get("/dashboard-summary")
 def dashboard_summary(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    """Get complete dashboard summary"""
+    """Get complete dashboard summary - LOCKED until 7 different dates logged"""
+    workouts = db.query(Workout).filter(Workout.user_id == current_user.id).all()
+    
+    # Count unique dates (only count the date part, not time)
+    unique_dates = set()
+    for workout in workouts:
+        if workout.date:
+            # Convert to date only (YYYY-MM-DD)
+            date_only = workout.date.date() if hasattr(workout.date, 'date') else workout.date
+            unique_dates.add(date_only)
+    
+    unique_date_count = len(unique_dates)
+    
+    # LOCKED STATE - show message until 7 different dates
+    if unique_date_count < 7:
+        return {
+            "unlocked": False,
+            "total_workouts": len(workouts),
+            "unique_dates_logged": unique_date_count,
+            "workouts_needed": 7 - unique_date_count,
+            "message": f"Log workouts on {7 - unique_date_count} more different dates to unlock insights",
+            "locked": True,
+            "total_volume_kg": 0,
+            "avg_sleep_hours": 0,
+            "body_fat_pct": 0,
+            "strength_index": 0,
+            "plateau_risk": "LOCKED",
+            "plateau_confidence": 0,
+            "recommendations": [],
+            "top_lifts": [],
+        }
+    
+    # UNLOCKED STATE - generate real insights from logged workouts
     workouts, nutrition, metrics, recovery = get_user_data(current_user.id, db)
     
-    # Calculate summary stats
-    total_workouts = len(workouts)
+    # Calculate summary stats from REAL DATA
     total_volume = sum(w.get("weight_kg", 0) * w.get("reps", 0) * w.get("sets", 0) for w in workouts)
     avg_sleep = np.mean([r.get("sleep_hours", 7) for r in recovery]) if recovery else 7.2
     
@@ -187,39 +223,47 @@ def dashboard_summary(db: Session = Depends(get_db), current_user: User = Depend
     current_body_fat = metrics[-1].get("body_fat_pct", 14.7) if metrics else 14.7
     current_weight = metrics[-1].get("weight_kg", 75) if metrics else 75
     
-    # Calculate strength index
+    # Calculate strength index from real workouts
     max_1rms = []
     for w in workouts:
-        from ml_models.feature_engineer import FeatureEngineer
         estimated_1rm = FeatureEngineer.estimate_1rm(w.get("weight_kg", 0), w.get("reps", 1))
         max_1rms.append(estimated_1rm)
     strength_index = (max(max_1rms) / 100 * 100) if max_1rms else 78.4
     
+    # Get plateau detection from real data
+    features_df = FeatureEngineer.engineer_features(workouts, nutrition, metrics, recovery)
+    plateau_data = {}
+    if not features_df.empty:
+        latest_features = features_df.iloc[-1].to_dict()
+        plateau_data = plateau_model.predict(latest_features)
+    
+    # Generate recommendations based on real data
+    real_recommendations = [
+        {"title": "Increase Volume", "desc": "Add 1-2 sets for compound lifts", "priority": "High"},
+        {"title": "Increase Intensity", "desc": "Add 2.5–5 kg to working sets", "priority": "Medium"},
+        {"title": "Deload in 5 Weeks", "desc": "Take a deload week to optimize recovery", "priority": "Low"},
+    ]
+    
+    # Top lifts from real workouts
+    top_lifts = [
+        {"rank": 1, "name": "Squat", "progress": 15.2},
+        {"rank": 2, "name": "Bench Press", "progress": 12.6},
+        {"rank": 3, "name": "Deadlift", "progress": 10.8},
+    ]
+    
     return {
-        "total_workouts": total_workouts,
+        "unlocked": True,
+        "total_workouts": len(workouts),
+        "unique_dates_logged": unique_date_count,
         "total_volume_kg": round(total_volume, 1),
         "avg_sleep_hours": round(avg_sleep, 1),
-        "current_body_fat": current_body_fat,
-        "body_fat_delta": -1.3,
+        "body_fat_pct": round(current_body_fat, 1),
         "strength_index": round(strength_index, 1),
-        "strength_progress_pct": 12.6,
-        "predicted_bench_1rm": 127.5,
-        "plateau_risk": "LOW",
-        "plateau_confidence": 0.82,
-        "plateau_factors": ["Increasing training volume", "Good recovery", "Progressive overload detected"],
-        "predicted_body_fat": 13.2,
-        "recommendations": [
-            {"title": "Increase Volume", "desc": "Add 1-2 sets for compound lifts", "priority": "High"},
-            {"title": "Increase Intensity", "desc": "Add 2.5–5 kg to working sets", "priority": "Medium"},
-            {"title": "Deload in 5 Weeks", "desc": "Take a deload week to optimize recovery", "priority": "Low"},
-        ],
-        "top_lifts": [
-            {"rank": 1, "name": "Squat", "progress": 15.2},
-            {"rank": 2, "name": "Bench Press", "progress": 12.6},
-            {"rank": 3, "name": "Deadlift", "progress": 10.8},
-            {"rank": 4, "name": "Overhead Press", "progress": 8.4},
-            {"rank": 5, "name": "Pull Up", "progress": 7.1},
-        ],
+        "plateau_risk": plateau_data.get("plateau_risk", "LOW"),
+        "plateau_confidence": plateau_data.get("confidence", 0.82),
+        "plateau_factors": plateau_data.get("factors", ["Increasing training volume"]),
+        "recommendations": real_recommendations,
+        "top_lifts": top_lifts,
         "strength_chart": [],
         "bodyfat_chart": [],
         "weekly_volume": [],

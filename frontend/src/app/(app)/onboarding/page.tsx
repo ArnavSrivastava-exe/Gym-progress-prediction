@@ -12,8 +12,7 @@ export default function OnboardingPage() {
   const [error, setError] = useState("")
 
   const [formData, setFormData] = useState({
-    // Step 1: Basic Info (from registration, but can update)
-    // Step 2: Training History
+    
     years_training: "",
     months_training: "",
     trained_consistently_6m: null as boolean | null,
@@ -91,48 +90,52 @@ export default function OnboardingPage() {
 const handleSubmit = async () => {
   setLoading(true)
   try {
-    const parseNum = (val: string) => {
-      if (!val || val === "") return null
-      const num = parseFloat(val)
-      return isNaN(num) ? null : num
-    }
+    // Helper function
+    const toNum = (val: string) => val ? parseFloat(val) : null
+    const toInt = (val: string) => val ? parseInt(val, 10) : null
 
-    const parseInt_safe = (val: string) => {
-      if (!val || val === "") return null
-      const num = parseInt(val, 10)
-      return isNaN(num) ? null : num
-    }
-
-    await api.post("/auth/onboarding", formData)
-
-    await api.post("/auth/training-metrics", {
-      bench_press_weight_kg: parseNum(formData.bench_press_weight_kg),
-      bench_press_reps: parseInt_safe(formData.bench_press_reps),
-      bench_press_sets: parseInt_safe(formData.bench_press_sets),
-      squat_weight_kg: parseNum(formData.squat_weight_kg),
-      squat_reps: parseInt_safe(formData.squat_reps),
-      squat_sets: parseInt_safe(formData.squat_sets),
-      deadlift_weight_kg: parseNum(formData.deadlift_weight_kg),
-      deadlift_reps: parseInt_safe(formData.deadlift_reps),
-      deadlift_sets: parseInt_safe(formData.deadlift_sets),
-      ohp_weight_kg: parseNum(formData.ohp_weight_kg),
-      ohp_reps: parseInt_safe(formData.ohp_reps),
-      ohp_sets: parseInt_safe(formData.ohp_sets),
+    // Send onboarding data (only non-empty values)
+    const onboardingPayload: any = {}
+    Object.entries(formData).forEach(([key, value]) => {
+      if (value === "" || value === null) return
+      if (typeof value === "string" && !isNaN(parseFloat(value))) {
+        onboardingPayload[key] = parseFloat(value)
+      } else {
+        onboardingPayload[key] = value
+      }
     })
 
+    await api.post("/auth/onboarding", onboardingPayload)
+
+    // Send training metrics
+    await api.post("/auth/training-metrics", {
+      bench_press_weight_kg: toNum(formData.bench_press_weight_kg),
+      bench_press_reps: toInt(formData.bench_press_reps),
+      bench_press_sets: toInt(formData.bench_press_sets),
+      squat_weight_kg: toNum(formData.squat_weight_kg),
+      squat_reps: toInt(formData.squat_reps),
+      squat_sets: toInt(formData.squat_sets),
+      deadlift_weight_kg: toNum(formData.deadlift_weight_kg),
+      deadlift_reps: toInt(formData.deadlift_reps),
+      deadlift_sets: toInt(formData.deadlift_sets),
+      ohp_weight_kg: toNum(formData.ohp_weight_kg),
+      ohp_reps: toInt(formData.ohp_reps),
+      ohp_sets: toInt(formData.ohp_sets),
+    })
+
+    // Send goals
     await api.post("/auth/goals", {
-      target_weight_kg: parseNum(formData.target_weight_kg),
-      target_body_fat_pct: parseNum(formData.target_body_fat_pct),
-      target_bench_press_kg: parseNum(formData.target_bench_press_kg),
-      target_squat_kg: parseNum(formData.target_squat_kg),
-      target_deadlift_kg: parseNum(formData.target_deadlift_kg),
-      target_ohp_kg: parseNum(formData.target_ohp_kg),
+      target_weight_kg: toNum(formData.target_weight_kg),
+      target_body_fat_pct: toNum(formData.target_body_fat_pct),
+      target_bench_press_kg: toNum(formData.target_bench_press_kg),
+      target_squat_kg: toNum(formData.target_squat_kg),
+      target_deadlift_kg: toNum(formData.target_deadlift_kg),
+      target_ohp_kg: toNum(formData.target_ohp_kg),
     })
 
     router.push("/onboarding-summary")
   } catch (err: any) {
     let errorMessage = "Failed to save onboarding data"
-
     if (err.response?.data?.detail) {
       if (typeof err.response.data.detail === "string") {
         errorMessage = err.response.data.detail
@@ -140,7 +143,6 @@ const handleSubmit = async () => {
         errorMessage = err.response.data.detail.map((e: any) => e.msg).join(", ")
       }
     }
-
     setError(errorMessage)
   } finally {
     setLoading(false)
