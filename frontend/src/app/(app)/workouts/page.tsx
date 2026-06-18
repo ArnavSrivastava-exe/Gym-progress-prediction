@@ -8,7 +8,8 @@ export default function WorkoutsPage() {
   const router = useRouter()
   const [workouts, setWorkouts] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [exercises, setExercises] = useState<string[]>([])
+  const [exerciseSearch, setExerciseSearch] = useState("")
+  const [showExerciseDropdown, setShowExerciseDropdown] = useState(false)
   const [formData, setFormData] = useState({
     exercise_name: "",
     weight_kg: "",
@@ -17,9 +18,88 @@ export default function WorkoutsPage() {
     date: new Date().toISOString().split("T")[0],
   })
 
+  // Comprehensive exercise list - sorted alphabetically
+  const allExercises = [
+    "Assisted Pull Ups",
+    "Barbell Curl",
+    "Barbell Flat Bench Press",
+    "Barbell Row",
+    "Bench Press",
+    "Bicep Curl",
+    "Cable Bar Overhead Extension",
+    "Cable Bicep Curl",
+    "Cable Curl",
+    "Cable Fly",
+    "Cable Row",
+    "Calf Raise",
+    "Chest Dips",
+    "Chest Supported T Bar Row Close",
+    "Chest Supported T Bar Row Wide",
+    "Close Grip Bench",
+    "Close Grip Chest Supported T Bar Row",
+    "Close Grip Lat Pulldown",
+    "Close Grip Shrugs",
+    "Decline Situps",
+    "Deadlift",
+    "Dumbbell Bench Press",
+    "Dumbbell Curl",
+    "Dumbbell Row",
+    "Dumbbell Shoulder Press",
+    "EZ Bar Preacher Curl",
+    "Face Pulls",
+    "Flat Bench Press",
+    "Flat Dumbbell Press",
+    "Front Raise",
+    "Front Squat",
+    "Full Up",
+    "Hack Squat",
+    "Hammer Curl",
+    "Handle Wide Grip Lat Pulldown",
+    "High to Low Cable Fly",
+    "Incline Bench Press",
+    "Incline Dumbbell Press",
+    "Incline Smith Bench Press",
+    "Lat Pulldown",
+    "Lateral Raise",
+    "Leg Curl",
+    "Leg Extension",
+    "Leg Press",
+    "Machine Crunch",
+    "Mid Cable Fly",
+    "Overhead Press",
+    "Pec Fly",
+    "Ped Fly",
+    "Pull Ups",
+    "Push Press",
+    "Reverse Fly",
+    "Romanian Deadlift",
+    "Rope Pushdown",
+    "Seal Row",
+    "Shrugs",
+    "Single Arm Dumbbell Preacher Curl",
+    "Skull Crushers",
+    "Smith Machine Incline Bench Press",
+    "Squat",
+    "Sumo Deadlift",
+    "T Row",
+    "Trap Bar Deadlift",
+    "Tricep Dips",
+    "Tricep Overhead Extension",
+    "Tricep Pushdown",
+    "Tricep Rod Pushdown",
+    "Tricep Rod Pushdowns",
+    "Wide Grip Chest Supported T Bar Row",
+    "Wide Grip Lat Pulldown",
+    "Wide Grip Shrugs",
+  ].sort()
+
+  // Filter exercises based on search
+  const filteredExercises = allExercises.filter((ex) =>
+    ex.toLowerCase().includes(exerciseSearch.toLowerCase())
+  )
+
   useEffect(() => {
     fetchWorkouts()
-    fetchExercises()
   }, [])
 
   const fetchWorkouts = async () => {
@@ -30,15 +110,6 @@ export default function WorkoutsPage() {
       console.error("Error fetching workouts:", err)
     } finally {
       setLoading(false)
-    }
-  }
-
-  const fetchExercises = async () => {
-    try {
-      const response = await api.get("/workouts/exercises")
-      setExercises(response.data.exercises)
-    } catch (err) {
-      console.error("Error fetching exercises:", err)
     }
   }
 
@@ -85,8 +156,8 @@ export default function WorkoutsPage() {
       }
 
       console.log("Sending payload:", payload)
-      const response = await api.post("/workouts", payload)
-      console.log("Success!", response.data)
+      await api.post("/workouts", payload)
+      console.log("Success!")
 
       setFormData({
         exercise_name: "",
@@ -95,7 +166,8 @@ export default function WorkoutsPage() {
         sets: "",
         date: new Date().toISOString().split("T")[0],
       })
-      
+      setExerciseSearch("")
+
       await fetchWorkouts()
       alert("✅ Workout logged successfully!")
     } catch (err: any) {
@@ -122,32 +194,80 @@ export default function WorkoutsPage() {
           <div>
             <h2 style={{ fontSize: "16px", fontWeight: "600", marginBottom: "24px", color: "white" }}>Log New Workout</h2>
             <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-              {/* Exercise */}
+              {/* Exercise - Searchable */}
               <div>
                 <label style={{ display: "block", fontSize: "13px", fontWeight: "600", marginBottom: "8px", color: "white" }}>
                   Exercise
                 </label>
-                <select
-                  value={formData.exercise_name}
-                  onChange={(e) => setFormData({ ...formData, exercise_name: e.target.value })}
-                  style={{
-                    width: "100%",
-                    padding: "12px 16px",
-                    background: "rgba(255,255,255,0.05)",
-                    border: "1px solid rgba(255,255,255,0.1)",
-                    borderRadius: "8px",
-                    color: "white",
-                    fontSize: "14px",
-                    boxSizing: "border-box",
-                  }}
-                >
-                  <option value="">Select an exercise...</option>
-                  {exercises.map((ex) => (
-                    <option key={ex} value={ex}>
-                      {ex}
-                    </option>
-                  ))}
-                </select>
+                <div style={{ position: "relative" }}>
+                  <input
+                    type="text"
+                    placeholder="Search exercises... (e.g., 'pr' for preacher curl)"
+                    value={formData.exercise_name || exerciseSearch}
+                    onChange={(e) => {
+                      setFormData({ ...formData, exercise_name: e.target.value })
+                      setExerciseSearch(e.target.value)
+                      setShowExerciseDropdown(true)
+                    }}
+                    onFocus={() => setShowExerciseDropdown(true)}
+                    style={{
+                      width: "100%",
+                      padding: "12px 16px",
+                      background: "rgba(255,255,255,0.05)",
+                      border: "1px solid rgba(255,255,255,0.1)",
+                      borderRadius: "8px",
+                      color: "white",
+                      fontSize: "14px",
+                      boxSizing: "border-box",
+                    }}
+                  />
+                  {showExerciseDropdown && filteredExercises.length > 0 && (
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: "100%",
+                        left: 0,
+                        right: 0,
+                        background: "rgba(0,0,0,0.9)",
+                        border: "1px solid rgba(255,255,255,0.1)",
+                        borderTop: "none",
+                        borderRadius: "0 0 8px 8px",
+                        maxHeight: "200px",
+                        overflowY: "auto",
+                        zIndex: 1000,
+                      }}
+                    >
+                      {filteredExercises.map((ex) => (
+                        <div
+                          key={ex}
+                          onClick={() => {
+                            setFormData({ ...formData, exercise_name: ex })
+                            setShowExerciseDropdown(false)
+                            setExerciseSearch("")
+                          }}
+                          style={{
+                            padding: "12px 16px",
+                            borderBottom: "1px solid rgba(255,255,255,0.05)",
+                            cursor: "pointer",
+                            fontSize: "14px",
+                            color: "rgba(255,255,255,0.8)",
+                            transition: "all 0.2s ease",
+                          }}
+                          onMouseOver={(e) => {
+                            ;(e.currentTarget as HTMLDivElement).style.background = "rgba(255,255,255,0.1)"
+                            ;(e.currentTarget as HTMLDivElement).style.color = "white"
+                          }}
+                          onMouseOut={(e) => {
+                            ;(e.currentTarget as HTMLDivElement).style.background = "transparent"
+                            ;(e.currentTarget as HTMLDivElement).style.color = "rgba(255,255,255,0.8)"
+                          }}
+                        >
+                          {ex}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Weight */}
@@ -259,12 +379,12 @@ export default function WorkoutsPage() {
                   marginTop: "12px",
                 }}
                 onMouseOver={(e) => {
-                  ;(e.target as HTMLButtonElement).style.background = "rgba(255,255,255,0.15)"
-                  ;(e.target as HTMLButtonElement).style.borderColor = "rgba(255,255,255,0.3)"
+                  ;(e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.15)"
+                  ;(e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(255,255,255,0.3)"
                 }}
                 onMouseOut={(e) => {
-                  ;(e.target as HTMLButtonElement).style.background = "rgba(255,255,255,0.1)"
-                  ;(e.target as HTMLButtonElement).style.borderColor = "rgba(255,255,255,0.2)"
+                  ;(e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.1)"
+                  ;(e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(255,255,255,0.2)"
                 }}
               >
                 Log Workout
@@ -288,12 +408,12 @@ export default function WorkoutsPage() {
                   marginTop: "8px",
                 }}
                 onMouseOver={(e) => {
-                  ;(e.target as HTMLButtonElement).style.background = "rgba(100,150,255,0.15)"
-                  ;(e.target as HTMLButtonElement).style.borderColor = "rgba(100,150,255,0.3)"
+                  ;(e.currentTarget as HTMLButtonElement).style.background = "rgba(100,150,255,0.15)"
+                  ;(e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(100,150,255,0.3)"
                 }}
                 onMouseOut={(e) => {
-                  ;(e.target as HTMLButtonElement).style.background = "rgba(100,150,255,0.1)"
-                  ;(e.target as HTMLButtonElement).style.borderColor = "rgba(100,150,255,0.2)"
+                  ;(e.currentTarget as HTMLButtonElement).style.background = "rgba(100,150,255,0.1)"
+                  ;(e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(100,150,255,0.2)"
                 }}
               >
                 ← Back to Dashboard
@@ -366,10 +486,10 @@ export default function WorkoutsPage() {
                         whiteSpace: "nowrap",
                       }}
                       onMouseOver={(e) => {
-                        ;(e.target as HTMLButtonElement).style.background = "rgba(255,100,100,0.2)"
+                        ;(e.currentTarget as HTMLButtonElement).style.background = "rgba(255,100,100,0.2)"
                       }}
                       onMouseOut={(e) => {
-                        ;(e.target as HTMLButtonElement).style.background = "rgba(255,100,100,0.1)"
+                        ;(e.currentTarget as HTMLButtonElement).style.background = "rgba(255,100,100,0.1)"
                       }}
                     >
                       Delete
